@@ -7,16 +7,16 @@
 void UIButton_Init(UIButton* btn) {
     // Define triangle vertices (simple right-facing play icon in NDC)
     float vertices[] = {
-        -0.95f, -0.85f,  // top-left
-        -0.95f, -0.95f,  // bottom-left
-        -0.85f, -0.90f   // middle-right
+        0.875f, 0.925f,  // top-left
+        0.875f, 0.875f,  // bottom-left
+        0.925f, 0.90f   // middle-right
     };
 
     // Store bounds for click detection
-    btn->x_min = vertices[0];
-    btn->x_max = -0.85f;
-    btn->y_min = -0.95f;
-    btn->y_max = -0.85f;
+    btn->x_min = vertices[0]; // -0.95f; 
+    btn->x_max = vertices[1]; // -0.85f;
+    btn->y_min = vertices[2]; // -0.95f;
+    btn->y_max = vertices[4]; //-0.85f;
 
     // Setup VAO/VBO
     glGenVertexArrays(1, &btn->VAO);

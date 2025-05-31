@@ -6,8 +6,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h> // For sin and cos functions
+#include "physics.h"
+#include "circle.h"
 
 #define M_PI 3.14159265358979323846
+#define MAX_CIRCLES 1000
+#define CIRCLE_NBR_SEGMENTS 100
+#define GRID_LENGTH 100
+
+//typedef struct {
+//    float xPos;
+//    float yPos;
+//    float radius;
+//    float xVelocity;
+//    float yVelocity;
+//    GLuint VAO;
+//    GLuint VBO;
+//} Circle;
+
 
 // Vertex Shader source code
 const char* vertexShaderSource = "#version 460 core\n"
@@ -108,11 +124,69 @@ void generateCircleVertices(float* vertices, float centerX, float centerY, float
     }
 }
 
+Circle circles[MAX_CIRCLES];
+
+void initializeCircles() {
+    float spacing = 0.004f;
+
+    float* circleVertices = malloc(sizeof(float) * 2 * CIRCLE_NBR_SEGMENTS * MAX_CIRCLES);
+    if (!circleVertices) {
+        fprintf(stderr, "Failed to allocate memory for circle\n");
+        exit(EXIT_FAILURE);
+    }
+
+
+    for (int i = 0; i < MAX_CIRCLES; i++) {
+        int row = i / GRID_LENGTH;
+        int col = i % GRID_LENGTH;
+        float offset = (MAX_CIRCLES/GRID_LENGTH )* spacing*2;
+    
+
+        circles[i].xPos = col * spacing - offset ;//(float)(i * 0.1f); // Example positions
+        circles[i].yPos = row * spacing; //(float)(i * 0.1f);
+
+        circles[i].radius = 0.007f;
+        circles[i].xVelocity = 0.5f * ((float)rand()/RAND_MAX);
+        circles[i].yVelocity = 0.01f * ((float)rand()/RAND_MAX);
+
+        // Generate circle vertices
+        //int numSegments = 100;
+        
+        generateCircleVertices(&circleVertices[i * 2 * CIRCLE_NBR_SEGMENTS], 0.0f, 0.0f, circles[i].radius, CIRCLE_NBR_SEGMENTS);
+    }
+    // Generate VAO and VBO
+    glGenVertexArrays(1, &circles[0].VAO);
+    glGenBuffers(1, &circles[0].VBO);
+
+    glBindVertexArray(circles[0].VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, circles[0].VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * CIRCLE_NBR_SEGMENTS *MAX_CIRCLES, circleVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+    free(circleVertices);
+    
+}
+
+void renderCircles(GLuint shaderProgram, GLint offsetLocation) {
+    glUseProgram(shaderProgram);
+    glBindVertexArray(circles[0].VAO); // Bind the single VAO
+
+    for (int i = 0; i < MAX_CIRCLES; i++) {
+        glUniform2f(offsetLocation, circles[i].xPos, circles[i].yPos);
+        glDrawArrays(GL_TRIANGLE_FAN, i * (CIRCLE_NBR_SEGMENTS + 2), CIRCLE_NBR_SEGMENTS + 2); // Draw each circle
+    }
+
+    glBindVertexArray(0);
+}
 
 int main(void) {
     if (!glfwInit()) {
         exit(EXIT_FAILURE);
     }
+    glfwWindowHint(GLFW_SAMPLES, 4); // Enable 4x multisampling
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); //Set the version to 4.6
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -135,6 +209,8 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
+    glEnable(GL_MULTISAMPLE); // Enable multisampling
+
 
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -147,45 +223,13 @@ int main(void) {
 
 
     UIButton_Init(&playButton);
-
-
-
-
-    // Circle parameters
-    int numSegments = 100;
-    float centerX = 0.0f;
-    float centerY = 0.0f;
-    float radius = 0.01f;
-
-    float* circleVertices = malloc(sizeof(float) * 2 * numSegments);
-    if (!circleVertices) {
-        fprintf(stderr, "Failed to allocate memory\n");
-        return -1;
-    }
-    generateCircleVertices(circleVertices, centerX, centerY, radius, numSegments);
-
-    // Generate VAO and VBO
-    GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    // Bind VAO
-    glBindVertexArray(VAO);
-
-    // Bind and fill VBO with circle vertices
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * numSegments, circleVertices, GL_STATIC_DRAW);
-
-    // Setup vertex attribute pointers
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // Unbind VAO (optional but good practice)
-    glBindVertexArray(0);
-
-    free(circleVertices);    
+    
+    initializeCircles();
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+
+    float timestep = 0.05f;
 
 
     while (!glfwWindowShouldClose(window)) {
@@ -193,23 +237,31 @@ int main(void) {
 
         // Clear screen
         glClear(GL_COLOR_BUFFER_BIT);
-        float xPos = 0.0f;
-        float yPos = 0.0f;
 
-        if (animationPlaying) {
-            float time = (float)glfwGetTime();
-            xPos = 0.5f * sinf(time);
-            yPos = 0.5f * cosf(time);
-        }
-        // Use shader program and bind VAO
         glUseProgram(shaderProgram);
-        glUniform2f(offsetLocation, xPos, yPos);
-        glBindVertexArray(VAO);
 
-        // Draw circle as line loop
-        glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments + 2);
-        glUniform2f(offsetLocation, 0.0f, 0.0f);
+        // Render circles if animation is playing
+        if (animationPlaying) {
+            updatePosition(circles, MAX_CIRCLES, timestep);//(&circles[i].xPos, &circles[i].yPos, &circles[i].xVelocity, &circles[i].yVelocity, timestep);
+
+
+            renderCircles(shaderProgram,offsetLocation);
+            //for (int i = 0; i < MAX_CIRCLES; i++) {
+            //    glUniform2f(offsetLocation, circles[i].xPos, circles[i].yPos);
+            //    glBindVertexArray(circles[i].VAO);
+            //    glDrawArrays(GL_TRIANGLE_FAN, 0, CIRCLE_NBR_SEGMENTS + 2); // numSegments + 2
+            //    glBindVertexArray(0);
+            //}
+        }
+
+
+
+        // Render play button (static, unaffected by animation)
+        glBindVertexArray(0); // Unbind any VAOs
+        glUniform2f(offsetLocation, 0.0f, 0.0f); 
+
         UIButton_Render(&playButton);
+
         // Unbind VAO
         glBindVertexArray(0);
 
